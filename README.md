@@ -1,1 +1,1 @@
-# Johns Hopkins Machine LEarning Project
+# Johns Hopkins Machine Learning Project
