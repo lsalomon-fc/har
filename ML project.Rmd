@@ -1,0 +1,118 @@
+---
+title: "Machine Learning project. HAR"
+author: "Luis Armando Salomon Hernandez"
+date: "5/28/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Introduction
+
+We will work with the data from http://groupware.les.inf.puc-rio.br/har (see section on the Weight Lifting Exercise Dataset). The data itself has the information  about personal activity from accelerometers on the belt, forearm, arm, and dumbell of 6 participants on the experiment. 
+
+Our purpose is to predict how they performed the exercise. We already have the data distributed in two sets: train and test. We will use the train data to find a suitable model and then predict on the test data.
+
+The nature of the data suggests that we are in a classical classification problem. We will try to give a solution using Random Forest. This approach is quite natural in this type of problem.
+
+```{r,message=FALSE,warning=FALSE}
+# Loading requiered packages and data
+library(ggplot2)
+library(dplyr)
+library(randomForest)
+library(e1071)
+library(caret)
+library(corrplot)
+train_data <- read.csv(file = 'pml-training.csv')
+test_data <- read.csv(file = 'pml-testing.csv')
+```
+
+## Data preparation
+
+The train data  has 19 622 observations and 160 variables and test data has 20 variables.
+
+```{r}
+# NAN analysis
+index <-sapply(train_data, function(x) sum(is.na(x)))==0
+plot(index, main = "NAN behaviour on variables",
+     ylab="",
+     xlab = "variables",
+     col = ifelse(index < 1,'blue','red'), pch=19)
+```
+
+
+As we can see there are a large amount of  variables with all NAN values (`r sum(index)`) and `r sum(!index)` variables without NAN. We will remove all the NAN variables. Also for the study we will employ a subset of those variables without NAN values. The subset is defined below for both samples.
+
+```{r}
+train_data_clean <- train_data[,index] %>%
+        select(classe,
+               roll_forearm, pitch_forearm, yaw_forearm,total_accel_forearm,
+               gyros_forearm_x, gyros_forearm_y, gyros_forearm_z,
+               accel_forearm_x, accel_forearm_y, accel_forearm_z,
+               magnet_forearm_x, magnet_forearm_y, magnet_forearm_z,
+               roll_belt, pitch_belt, yaw_belt,total_accel_belt,
+               gyros_belt_x, gyros_belt_y, gyros_belt_z,
+               accel_belt_x, accel_belt_y, accel_belt_z,
+               magnet_belt_x, magnet_belt_y, magnet_belt_z,
+               roll_arm, pitch_arm, yaw_arm,total_accel_arm,
+               gyros_arm_x, gyros_arm_y, gyros_arm_z,
+               accel_arm_x, accel_arm_y, accel_arm_z,
+               magnet_arm_x, magnet_arm_y, magnet_arm_z,
+               roll_dumbbell, pitch_dumbbell, yaw_dumbbell,total_accel_dumbbell,
+               gyros_dumbbell_x, gyros_dumbbell_y, gyros_dumbbell_z,
+               accel_dumbbell_x, accel_dumbbell_y, accel_dumbbell_z,
+               magnet_dumbbell_x, magnet_dumbbell_y, magnet_dumbbell_z
+        )
+test_data_clean <-test_data[ , -which(names(train_data_clean) %in% c("classe"))]
+```
+
+On the next figure we can see that, in general all variables are incorrelated, except for some small groups. However for this experiment we will continue without any further feature elimination 
+
+```{r}
+train_data_numeric = train_data_clean %>% dplyr::select(where(is.numeric))
+corrplot(cor(train_data_numeric), method = "circle", diag = FALSE,tl.col = "black",tl.srt = 45, tl.cex = 0.4)
+
+```
+
+## Model selection and results
+
+As we mentioned at the beginning of the document, we are in a classification problem. We could use various approaches such as random tree, random forest, multinomial logistic regression, among others. We chose Random Forest for flexibility and strength. It is a powerful model that works quite well for these types of problems and is not very demanding in the assumptions for its use.
+
+
+
+We use randon forest by two approaches. The first one with  **randomForest** package and the second one with the **caret** package. This last one allow us to use crosvalidation automatically. 
+```{r,warning=FALSE}
+# Random forest (no crossvalidation)
+model_har <- randomForest(classe ~ ., data = train_data_clean, method = "rf", ntree = 50)
+print(model_har)
+prediction_har <- predict(model_har, train_data_clean)
+confusionMatrix(prediction_har, train_data_clean$classe)
+```
+
+
+As we can see the results are quite good.
+```{r,warning=FALSE}
+# Random forest with crossvalidation
+control <- trainControl(method='repeatedcv', 
+                        number=10, 
+                        repeats=3,
+                        search = 'random')
+model_har_cv <- train(classe ~ ., data = train_data_clean, method = "rf", ntree = 5, trControl = control)
+prediction_har_cv <- predict(model_har_cv, train_data_clean)
+print(model_har_cv )
+confusionMatrix(prediction_har_cv, train_data_clean$classe)
+```
+
+As expected we achieve a very good result also. The accuracy in both case is quite high. We could choose either of both models. For both  we achieve similar results:
+```{r,warning=FALSE}
+prediction_har <- predict(model_har, test_data_clean)
+prediction_har_cv <- predict(model_har_cv, test_data_clean)
+HAR <- prediction_har
+HAR_CV <- prediction_har_cv
+data.frame(HAR, HAR_CV)
+```
+
+We should expect that  out the sample error be small.
+
